@@ -13,6 +13,9 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import org.json.JSONObject
+import android.media.AudioFormat
+import android.media.AudioRecord
+import android.media.MediaRecorder
 
 class ModelLoader(private val context: Context) {
 
@@ -89,6 +92,9 @@ class TTSManagerModule(private val reactContext: ReactApplicationContext) : Reac
     private var recognizer: OfflineRecognizer? = null
     private var sttStream: OfflineStream? = null
     private var sttSampleRate: Int = 16000
+    private var audioRecorder: AudioRecord? = null
+    private var recordingThread: Thread? = null
+    private var isRecording: Boolean = false
 
     override fun getName(): String {
         return "TTSManager"
@@ -167,10 +173,37 @@ class TTSManagerModule(private val reactContext: ReactApplicationContext) : Reac
         recognizer = OfflineRecognizer(reactContext.assets, cfg)
     }
 
-    // Begin a recognition session
+    // Begin a recognition session from the microphone
     @ReactMethod
     fun startRecognition() {
         sttStream = recognizer?.createStream()
+        val minBuf = AudioRecord.getMinBufferSize(
+            sttSampleRate,
+            AudioFormat.CHANNEL_IN_MONO,
+            AudioFormat.ENCODING_PCM_16BIT
+        )
+        audioRecorder = AudioRecord(
+            MediaRecorder.AudioSource.MIC,
+            sttSampleRate,
+            AudioFormat.CHANNEL_IN_MONO,
+            AudioFormat.ENCODING_PCM_16BIT,
+            minBuf
+        )
+        audioRecorder?.startRecording()
+        isRecording = true
+        recordingThread = thread(start = true) {
+            val buffer = ShortArray(1024)
+            while (isRecording) {
+                val read = audioRecorder!!.read(buffer, 0, buffer.size)
+                if (read > 0) {
+                    val floatSamples = FloatArray(read)
+                    for (i in 0 until read) {
+                        floatSamples[i] = buffer[i] / 32768.0f
+                    }
+                    sttStream?.acceptWaveform(floatSamples, sttSampleRate)
+                }
+            }
+        }
     }
 
     // Feed audio data as base64-encoded PCM16LE
@@ -189,6 +222,13 @@ class TTSManagerModule(private val reactContext: ReactApplicationContext) : Reac
     // Stop recognition and return the transcription
     @ReactMethod
     fun stopRecognition(promise: Promise) {
+        isRecording = false
+        recordingThread?.join()
+        recordingThread = null
+        audioRecorder?.stop()
+        audioRecorder?.release()
+        audioRecorder = null
+
         val stream = sttStream
         val rec = recognizer
         if (stream == null || rec == null) {
@@ -205,6 +245,12 @@ class TTSManagerModule(private val reactContext: ReactApplicationContext) : Reac
     // Release recognizer resources
     @ReactMethod
     fun deinitializeSTT() {
+        isRecording = false
+        recordingThread?.join()
+        recordingThread = null
+        audioRecorder?.stop()
+        audioRecorder?.release()
+        audioRecorder = null
         recognizer?.release()
         recognizer = null
         sttStream = null

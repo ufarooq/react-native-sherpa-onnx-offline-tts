@@ -91,8 +91,8 @@ async function sayHello() {
 | **addVolumeListener** | `(cb: (volume: number) => void): EmitterSubscription` | Subscribes to real‑time RMS volume callbacks during playback. Call `subscription.remove()` to unsubscribe. |
 | **deinitialize** | `(): void` | Frees native resources – call this when your app unmounts or goes to background for a long time. |
 | **initSTT** | `(configJson: string): void` | Initialise offline speech recognition with model paths. |
-| **startRecognition** | `(): void` | Begin feeding audio samples for STT. |
-| **feedAudio** | `(base64Pcm: string): void` | Supply PCM16LE data to the recogniser. |
+| **startRecognition** | `(): void` | Begin streaming audio from the device microphone. |
+| **feedAudio** | `(base64Pcm: string): void` | *(Optional)* Manually supply PCM16LE data. |
 | **stopRecognition** | `(): Promise<string>` | Finish decoding and return the recognised text. |
 | **deinitializeSTT** | `(): void` | Release STT resources. |
 
@@ -112,8 +112,8 @@ const cfg = JSON.stringify({
 async function recognise(path: string) {
   await TTSManager.initSTT(cfg);
   TTSManager.startRecognition();
-  const data = await RNFS.readFile(path, 'base64');
-  TTSManager.feedAudio(data);
+  // speak for a few seconds then stop
+  await new Promise((r) => setTimeout(r, 5000));
   const text = await TTSManager.stopRecognition();
   console.log('Transcription:', text);
 }

@@ -16,6 +16,7 @@ class TTSManager: RCTEventEmitter, AudioPlayerDelegate {
     private var recognizer: SherpaOnnxOfflineRecognizer?
     private var sttSamples: [Float] = []
     private var sttSampleRate: Int = 16000
+    private var audioEngine: AVAudioEngine?
     
     override init() {
         super.init()
@@ -69,6 +70,19 @@ class TTSManager: RCTEventEmitter, AudioPlayerDelegate {
 
     @objc func startRecognition() {
         sttSamples.removeAll()
+        audioEngine = AVAudioEngine()
+        guard let engine = audioEngine else { return }
+        let input = engine.inputNode
+        let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: Double(sttSampleRate), channels: 1, interleaved: false)
+        input.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
+            let count = Int(buffer.frameLength)
+            if let data = buffer.floatChannelData?[0] {
+                let samples = Array(UnsafeBufferPointer(start: data, count: count))
+                self.sttSamples.append(contentsOf: samples)
+            }
+        }
+        engine.prepare()
+        try? engine.start()
     }
 
     @objc func feedAudio(_ data: String) {
@@ -86,6 +100,9 @@ class TTSManager: RCTEventEmitter, AudioPlayerDelegate {
     }
 
     @objc func stopRecognition(_ resolver: RCTPromiseResolveBlock, rejecter: RCTPromiseRejectBlock) {
+        audioEngine?.inputNode.removeTap(onBus: 0)
+        audioEngine?.stop()
+        audioEngine = nil
         guard let rec = recognizer else {
             rejecter("NOT_READY", "Recognizer not ready", nil)
             return
@@ -96,8 +113,10 @@ class TTSManager: RCTEventEmitter, AudioPlayerDelegate {
     }
 
     @objc func deinitializeSTT() {
-        recognizer = nil
+        audioEngine?.stop()
+        audioEngine = nil
         sttSamples.removeAll()
+        recognizer = nil
     }
 
     // Generate audio and play in real-time

@@ -230,12 +230,10 @@ const App = () => {
   };
 
   /**
-   * Simple demo STT using a bundled PCM file
+   * Simple demo STT capturing from the microphone
    */
   const handleSTT = async () => {
     try {
-      const audioPath = `${RNFS.DocumentDirectoryPath}/sample.pcm`;
-      const data = await RNFS.readFile(audioPath, 'base64');
       await TTSManager.initSTT(
         JSON.stringify({
           encoder: 'encoder.onnx',
@@ -245,7 +243,7 @@ const App = () => {
         })
       );
       TTSManager.startRecognition();
-      TTSManager.feedAudio(data);
+      await new Promise((res) => setTimeout(res, 5000));
       const text = await TTSManager.stopRecognition();
       setTranscript(text);
     } catch (e) {
