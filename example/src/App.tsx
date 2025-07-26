@@ -20,6 +20,7 @@ const App = () => {
   const [downloadProgress, setDownloadProgress] = useState<number>(0);
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  const [transcript, setTranscript] = useState<string>('');
 
   // References
   const animatedScale = useRef(new Animated.Value(1)).current;
@@ -228,6 +229,30 @@ const App = () => {
     console.log('Playback stopped.');
   };
 
+  /**
+   * Simple demo STT using a bundled PCM file
+   */
+  const handleSTT = async () => {
+    try {
+      const audioPath = `${RNFS.DocumentDirectoryPath}/sample.pcm`;
+      const data = await RNFS.readFile(audioPath, 'base64');
+      await TTSManager.initSTT(
+        JSON.stringify({
+          encoder: 'encoder.onnx',
+          decoder: 'decoder.onnx',
+          joiner: 'joiner.onnx',
+          tokens: 'tokens.txt',
+        })
+      );
+      TTSManager.startRecognition();
+      TTSManager.feedAudio(data);
+      const text = await TTSManager.stopRecognition();
+      setTranscript(text);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   return (
     <View style={styles.container}>
       {/* Display Download Progress */}
@@ -262,9 +287,11 @@ const App = () => {
               onPress={handleStop}
               disabled={!isPlaying}
             />
+            <Button title="Run STT" onPress={handleSTT} />
           </View>
           <View style={styles.volumeContainer}>
             <Text>Current Volume: {volume.toFixed(2)}</Text>
+            <Text>Transcript: {transcript}</Text>
           </View>
         </>
       )}

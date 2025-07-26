@@ -3,6 +3,9 @@ package com.sherpaonnxofflinetts
 import com.facebook.react.bridge.*
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import com.k2fsa.sherpa.onnx.*
+import android.util.Base64
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import android.content.res.AssetManager
 import kotlin.concurrent.thread
 import android.content.Context
@@ -82,6 +85,11 @@ class TTSManagerModule(private val reactContext: ReactApplicationContext) : Reac
     private var realTimeAudioPlayer: AudioPlayer? = null
     private val modelLoader = ModelLoader(reactContext)
 
+    // STT properties
+    private var recognizer: OfflineRecognizer? = null
+    private var sttStream: OfflineStream? = null
+    private var sttSampleRate: Int = 16000
+
     override fun getName(): String {
         return "TTSManager"
     }
@@ -130,6 +138,78 @@ class TTSManagerModule(private val reactContext: ReactApplicationContext) : Reac
         realTimeAudioPlayer?.start()
     }
 
+    // Initialize offline speech recognizer
+    @ReactMethod
+    fun initializeSTT(modelId: String) {
+        val jsonObject = JSONObject(modelId)
+        val encoder = jsonObject.getString("encoder")
+        val decoder = jsonObject.getString("decoder")
+        val joiner = jsonObject.getString("joiner")
+        val tokens = jsonObject.getString("tokens")
+        sttSampleRate = jsonObject.optInt("sampleRate", 16000)
+
+        val modelConfig = OfflineModelConfig(
+            transducer = OfflineTransducerModelConfig(
+                encoder = encoder,
+                decoder = decoder,
+                joiner = joiner
+            ),
+            tokens = tokens,
+            numThreads = 1,
+            debug = true,
+            provider = "cpu"
+        )
+        val feat = FeatureConfig(sttSampleRate, 80)
+        val cfg = OfflineRecognizerConfig(
+            featConfig = feat,
+            modelConfig = modelConfig
+        )
+        recognizer = OfflineRecognizer(reactContext.assets, cfg)
+    }
+
+    // Begin a recognition session
+    @ReactMethod
+    fun startRecognition() {
+        sttStream = recognizer?.createStream()
+    }
+
+    // Feed audio data as base64-encoded PCM16LE
+    @ReactMethod
+    fun feedAudio(data: String) {
+        val stream = sttStream ?: return
+        val bytes = Base64.decode(data, Base64.DEFAULT)
+        val buf = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+        val samples = FloatArray(bytes.size / 2)
+        for (i in samples.indices) {
+            samples[i] = buf.short.toFloat() / 32768.0f
+        }
+        stream.acceptWaveform(samples, sttSampleRate)
+    }
+
+    // Stop recognition and return the transcription
+    @ReactMethod
+    fun stopRecognition(promise: Promise) {
+        val stream = sttStream
+        val rec = recognizer
+        if (stream == null || rec == null) {
+            promise.reject("NOT_READY", "Recognizer not ready")
+            return
+        }
+        rec.decode(stream)
+        val result = rec.getResult(stream)
+        stream.release()
+        sttStream = null
+        promise.resolve(result.text)
+    }
+
+    // Release recognizer resources
+    @ReactMethod
+    fun deinitializeSTT() {
+        recognizer?.release()
+        recognizer = null
+        sttStream = null
+    }
+
     // Generate and Play method exposed to React Native
     @ReactMethod
     fun generateAndPlay(text: String, sid: Int, speed: Double, promise: Promise) {
@@ -159,6 +239,7 @@ class TTSManagerModule(private val reactContext: ReactApplicationContext) : Reac
         realTimeAudioPlayer = null
         tts?.release()
         tts = null
+        deinitializeSTT()
     }
 
     // Helper: split text into manageable chunks similar to iOS logic

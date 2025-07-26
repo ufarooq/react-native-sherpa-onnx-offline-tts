@@ -1,6 +1,6 @@
 # react-native-sherpa-onnx-offline-tts
 
-A lightweight React Native wrapper around [Sherpa‑ONNX](https://github.com/k2-fsa/sherpa-onnx) that lets you run **100 % offline Text‑to‑Speech** on iOS and Android.
+A lightweight React Native wrapper around [Sherpa‑ONNX](https://github.com/k2-fsa/sherpa-onnx) that lets you run **100 % offline Text‑to‑Speech** and **Speech‑to‑Text** on iOS and Android.
 
 ---
 
@@ -9,7 +9,7 @@ A lightweight React Native wrapper around [Sherpa‑ONNX](https://github.com/k2
 | | |
 |---|---|
 | 🔊 **Offline** – all synthesis happens on‑device, no network needed | ⚡ **Fast** – real‑time (or faster) generation on modern phones |
-| 🎙️ **Natural voices** – drop‑in support for Piper / VITS ONNX models | 🛠️ **Simple API** – a handful of async methods you already know |
+| 🎙️ **Natural voices** – drop‑in support for Piper / VITS ONNX models | 🛠️ **Simple API** – TTS & STT with a handful of async methods |
 
 ---
 
@@ -90,6 +90,11 @@ async function sayHello() {
 | **stopPlaying** | `(): void` | Immediately stops playback. |
 | **addVolumeListener** | `(cb: (volume: number) => void): EmitterSubscription` | Subscribes to real‑time RMS volume callbacks during playback. Call `subscription.remove()` to unsubscribe. |
 | **deinitialize** | `(): void` | Frees native resources – call this when your app unmounts or goes to background for a long time. |
+| **initSTT** | `(configJson: string): void` | Initialise offline speech recognition with model paths. |
+| **startRecognition** | `(): void` | Begin feeding audio samples for STT. |
+| **feedAudio** | `(base64Pcm: string): void` | Supply PCM16LE data to the recogniser. |
+| **stopRecognition** | `(): Promise<string>` | Finish decoding and return the recognised text. |
+| **deinitializeSTT** | `(): void` | Release STT resources. |
 
 ---
 
