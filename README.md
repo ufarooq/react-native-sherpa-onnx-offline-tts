@@ -96,6 +96,29 @@ async function sayHello() {
 | **stopRecognition** | `(): Promise<string>` | Finish decoding and return the recognised text. |
 | **deinitializeSTT** | `(): void` | Release STT resources. |
 
+### STT Quick Example
+
+```tsx
+import TTSManager from 'react-native-sherpa-onnx-offline-tts';
+import RNFS from 'react-native-fs';
+
+const cfg = JSON.stringify({
+  encoder: '/path/encoder.onnx',
+  decoder: '/path/decoder.onnx',
+  joiner: '/path/joiner.onnx',
+  tokens: '/path/tokens.txt',
+});
+
+async function recognise(path: string) {
+  await TTSManager.initSTT(cfg);
+  TTSManager.startRecognition();
+  const data = await RNFS.readFile(path, 'base64');
+  TTSManager.feedAudio(data);
+  const text = await TTSManager.stopRecognition();
+  console.log('Transcription:', text);
+}
+```
+
 ---
 
 ## 🔊 Supported Models
