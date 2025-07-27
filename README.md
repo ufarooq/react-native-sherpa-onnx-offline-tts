@@ -109,11 +109,12 @@ const cfg = JSON.stringify({
   tokens: '/path/tokens.txt',
 });
 
-async function recognise(path: string) {
+async function startListening() {
   await TTSManager.initSTT(cfg);
   TTSManager.startRecognition();
-  // speak for a few seconds then stop
-  await new Promise((r) => setTimeout(r, 5000));
+}
+
+async function stopListening() {
   const text = await TTSManager.stopRecognition();
   console.log('Transcription:', text);
 }

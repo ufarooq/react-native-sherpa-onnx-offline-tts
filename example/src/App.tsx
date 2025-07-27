@@ -20,6 +20,7 @@ const App = () => {
   const [downloadProgress, setDownloadProgress] = useState<number>(0);
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  const [isListening, setIsListening] = useState<boolean>(false);
   const [transcript, setTranscript] = useState<string>('');
 
   // References
@@ -230,9 +231,9 @@ const App = () => {
   };
 
   /**
-   * Simple demo STT capturing from the microphone
+   * Begin STT capture from the microphone
    */
-  const handleSTT = async () => {
+  const handleStartSTT = async () => {
     try {
       await TTSManager.initSTT(
         JSON.stringify({
@@ -243,11 +244,23 @@ const App = () => {
         })
       );
       TTSManager.startRecognition();
-      await new Promise((res) => setTimeout(res, 5000));
+      setIsListening(true);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  /**
+   * Stop STT capture and display the result
+   */
+  const handleStopSTT = async () => {
+    try {
       const text = await TTSManager.stopRecognition();
       setTranscript(text);
     } catch (e) {
       console.error(e);
+    } finally {
+      setIsListening(false);
     }
   };
 
@@ -285,7 +298,16 @@ const App = () => {
               onPress={handleStop}
               disabled={!isPlaying}
             />
-            <Button title="Run STT" onPress={handleSTT} />
+            <Button
+              title="Start STT"
+              onPress={handleStartSTT}
+              disabled={isListening}
+            />
+            <Button
+              title="Stop STT"
+              onPress={handleStopSTT}
+              disabled={!isListening}
+            />
           </View>
           <View style={styles.volumeContainer}>
             <Text>Current Volume: {volume.toFixed(2)}</Text>
