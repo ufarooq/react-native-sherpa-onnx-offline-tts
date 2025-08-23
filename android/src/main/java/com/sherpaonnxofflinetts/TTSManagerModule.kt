@@ -89,8 +89,8 @@ class TTSManagerModule(private val reactContext: ReactApplicationContext) : Reac
     private val modelLoader = ModelLoader(reactContext)
 
     // STT properties
-    private var recognizer: OfflineRecognizer? = null
-    private var sttStream: OfflineStream? = null
+    private var recognizer: OnlineRecognizer? = null
+    private var sttStream: OnlineStream? = null
     private var sttSampleRate: Int = 16000
     private var audioRecorder: AudioRecord? = null
     private var recordingThread: Thread? = null
@@ -154,8 +154,8 @@ class TTSManagerModule(private val reactContext: ReactApplicationContext) : Reac
         val tokens = jsonObject.getString("tokens")
         sttSampleRate = jsonObject.optInt("sampleRate", 16000)
 
-        val modelConfig = OfflineModelConfig(
-            transducer = OfflineTransducerModelConfig(
+        val modelConfig = OnlineModelConfig(
+            transducer = OnlineTransducerModelConfig(
                 encoder = encoder,
                 decoder = decoder,
                 joiner = joiner
@@ -166,11 +166,23 @@ class TTSManagerModule(private val reactContext: ReactApplicationContext) : Reac
             provider = "cpu"
         )
         val feat = FeatureConfig(sttSampleRate, 80)
-        val cfg = OfflineRecognizerConfig(
+        val endpoint = EndpointConfig()
+        val cfg = OnlineRecognizerConfig(
             featConfig = feat,
-            modelConfig = modelConfig
+            modelConfig = modelConfig,
+            lmConfig = OnlineLMConfig(),
+            ctcFstDecoderConfig = OnlineCtcFstDecoderConfig(),
+            endpointConfig = endpoint,
+            enableEndpoint = false,
+            decodingMethod = "greedy_search",
+            maxActivePaths = 4,
+            hotwordsFile = "",
+            hotwordsScore = 1.5f,
+            ruleFsts = "",
+            ruleFars = "",
+            blankPenalty = 0.0f
         )
-        recognizer = OfflineRecognizer(reactContext.assets, cfg)
+        recognizer = OnlineRecognizer(reactContext.assets, cfg)
     }
 
     // Begin a recognition session from the microphone
@@ -201,6 +213,9 @@ class TTSManagerModule(private val reactContext: ReactApplicationContext) : Reac
                         floatSamples[i] = buffer[i] / 32768.0f
                     }
                     sttStream?.acceptWaveform(floatSamples, sttSampleRate)
+                    while (recognizer?.isReady(sttStream!!) == true) {
+                        recognizer?.decode(sttStream!!)
+                    }
                 }
             }
         }
@@ -217,6 +232,9 @@ class TTSManagerModule(private val reactContext: ReactApplicationContext) : Reac
             samples[i] = buf.short.toFloat() / 32768.0f
         }
         stream.acceptWaveform(samples, sttSampleRate)
+        while (recognizer?.isReady(stream) == true) {
+            recognizer?.decode(stream)
+        }
     }
 
     // Stop recognition and return the transcription
@@ -235,7 +253,10 @@ class TTSManagerModule(private val reactContext: ReactApplicationContext) : Reac
             promise.reject("NOT_READY", "Recognizer not ready")
             return
         }
-        rec.decode(stream)
+        stream.inputFinished()
+        while (rec.isReady(stream)) {
+            rec.decode(stream)
+        }
         val result = rec.getResult(stream)
         stream.release()
         sttStream = null

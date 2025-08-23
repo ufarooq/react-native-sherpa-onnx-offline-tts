@@ -93,7 +93,7 @@ async function sayHello() {
 | **initSTT** | `(configJson: string): void` | Initialise offline speech recognition with model paths. |
 | **startRecognition** | `(): void` | Begin streaming audio from the device microphone. |
 | **feedAudio** | `(base64Pcm: string): void` | *(Optional)* Manually supply PCM16LE data. |
-| **stopRecognition** | `(): Promise<string>` | Finish decoding and return the recognised text. |
+| **stopRecognition** | `(): Promise<string>` | Stop streaming and get the transcription. |
 | **deinitializeSTT** | `(): void` | Release STT resources. |
 
 ### STT Quick Example

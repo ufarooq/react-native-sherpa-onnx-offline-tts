@@ -13,8 +13,7 @@ protocol AudioPlayerDelegate: AnyObject {
 class TTSManager: RCTEventEmitter, AudioPlayerDelegate {
     private var tts: SherpaOnnxOfflineTtsWrapper?
     private var realTimeAudioPlayer: AudioPlayer?
-    private var recognizer: SherpaOnnxOfflineRecognizer?
-    private var sttSamples: [Float] = []
+    private var recognizer: SherpaOnnxRecognizer?
     private var sttSampleRate: Int = 16000
     private var audioEngine: AVAudioEngine?
     
@@ -41,7 +40,7 @@ class TTSManager: RCTEventEmitter, AudioPlayerDelegate {
         self.tts = createOfflineTts(modelId: modelId)
     }
 
-    // Initialize offline STT
+    // Initialize streaming STT
     @objc(initializeSTT:)
     func initializeSTT(_ modelId: String) {
         guard let data = modelId.data(using: .utf8),
@@ -52,9 +51,9 @@ class TTSManager: RCTEventEmitter, AudioPlayerDelegate {
         let tokens = json["tokens"] as? String ?? ""
         sttSampleRate = json["sampleRate"] as? Int ?? 16000
 
-        var model = sherpaOnnxOfflineModelConfig(
+        var model = sherpaOnnxOnlineModelConfig(
             tokens: tokens,
-            transducer: sherpaOnnxOfflineTransducerModelConfig(
+            transducer: sherpaOnnxOnlineTransducerModelConfig(
                 encoder: encoder,
                 decoder: decoder,
                 joiner: joiner
@@ -64,21 +63,27 @@ class TTSManager: RCTEventEmitter, AudioPlayerDelegate {
             provider: "cpu"
         )
         let feat = sherpaOnnxFeatureConfig(sampleRate: sttSampleRate)
-        var cfg = sherpaOnnxOfflineRecognizerConfig(featConfig: feat, modelConfig: model)
-        recognizer = SherpaOnnxOfflineRecognizer(config: &cfg)
+        var cfg = sherpaOnnxOnlineRecognizerConfig(
+            featConfig: feat,
+            modelConfig: model,
+            enableEndpoint: false
+        )
+        recognizer = SherpaOnnxRecognizer(config: &cfg)
     }
 
     @objc func startRecognition() {
-        sttSamples.removeAll()
         audioEngine = AVAudioEngine()
-        guard let engine = audioEngine else { return }
+        guard let engine = audioEngine, let rec = recognizer else { return }
         let input = engine.inputNode
         let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: Double(sttSampleRate), channels: 1, interleaved: false)
         input.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
             let count = Int(buffer.frameLength)
             if let data = buffer.floatChannelData?[0] {
-                let samples = Array(UnsafeBufferPointer(start: data, count: count))
-                self.sttSamples.append(contentsOf: samples)
+                var samples = Array(UnsafeBufferPointer(start: data, count: count))
+                rec.acceptWaveform(samples: samples, sampleRate: self.sttSampleRate)
+                while rec.isReady() {
+                    rec.decode()
+                }
             }
         }
         engine.prepare()
@@ -86,17 +91,20 @@ class TTSManager: RCTEventEmitter, AudioPlayerDelegate {
     }
 
     @objc func feedAudio(_ data: String) {
-        guard let bytes = Data(base64Encoded: data) else { return }
+        guard let bytes = Data(base64Encoded: data), let rec = recognizer else { return }
         let count = bytes.count / 2
-        var local = [Float]()
-        local.reserveCapacity(count)
+        var samples = [Float]()
+        samples.reserveCapacity(count)
         bytes.withUnsafeBytes { buf in
             for i in 0..<count {
                 let val = buf.load(fromByteOffset: i*2, as: Int16.self)
-                local.append(Float(val) / 32768.0)
+                samples.append(Float(val) / 32768.0)
             }
         }
-        sttSamples.append(contentsOf: local)
+        rec.acceptWaveform(samples: samples, sampleRate: sttSampleRate)
+        while rec.isReady() {
+            rec.decode()
+        }
     }
 
     @objc func stopRecognition(_ resolver: RCTPromiseResolveBlock, rejecter: RCTPromiseRejectBlock) {
@@ -107,15 +115,17 @@ class TTSManager: RCTEventEmitter, AudioPlayerDelegate {
             rejecter("NOT_READY", "Recognizer not ready", nil)
             return
         }
-        let result = rec.decode(samples: sttSamples, sampleRate: sttSampleRate)
-        sttSamples.removeAll()
+        rec.inputFinished()
+        while rec.isReady() {
+            rec.decode()
+        }
+        let result = rec.getResult()
         resolver(result.text)
     }
 
     @objc func deinitializeSTT() {
         audioEngine?.stop()
         audioEngine = nil
-        sttSamples.removeAll()
         recognizer = nil
     }
 
