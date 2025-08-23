@@ -91,9 +91,9 @@ async function sayHello() {
 | **addVolumeListener** | `(cb: (volume: number) => void): EmitterSubscription` | Subscribes to real‑time RMS volume callbacks during playback. Call `subscription.remove()` to unsubscribe. |
 | **deinitialize** | `(): void` | Frees native resources – call this when your app unmounts or goes to background for a long time. |
 | **initSTT** | `(configJson: string): void` | Initialise offline speech recognition with model paths. |
-| **startRecognition** | `(): void` | Begin streaming audio from the device microphone. |
-| **feedAudio** | `(base64Pcm: string): void` | *(Optional)* Manually supply PCM16LE data. |
-| **stopRecognition** | `(): Promise<string>` | Stop streaming and get the transcription. |
+| **startRecognition** | `(): void` | Begin capturing mic audio for offline decoding. |
+| **feedAudio** | `(base64Pcm: string): void` | *(Optional)* Append PCM16LE audio samples. |
+| **stopRecognition** | `(): Promise<string>` | Finish capture and return the transcription. |
 | **deinitializeSTT** | `(): void` | Release STT resources. |
 
 ### STT Quick Example
@@ -111,11 +111,11 @@ const cfg = JSON.stringify({
 
 async function startListening() {
   await TTSManager.initSTT(cfg);
-  TTSManager.startRecognition();
+  TTSManager.startRecognition(); // capture mic audio
 }
 
 async function stopListening() {
-  const text = await TTSManager.stopRecognition();
+  const text = await TTSManager.stopRecognition(); // decode offline
   console.log('Transcription:', text);
 }
 ```

@@ -13,9 +13,10 @@ protocol AudioPlayerDelegate: AnyObject {
 class TTSManager: RCTEventEmitter, AudioPlayerDelegate {
     private var tts: SherpaOnnxOfflineTtsWrapper?
     private var realTimeAudioPlayer: AudioPlayer?
-    private var recognizer: SherpaOnnxRecognizer?
+    private var recognizer: SherpaOnnxOfflineRecognizer?
     private var sttSampleRate: Int = 16000
     private var audioEngine: AVAudioEngine?
+    private var capturedSamples: [Float] = []
     
     override init() {
         super.init()
@@ -51,39 +52,38 @@ class TTSManager: RCTEventEmitter, AudioPlayerDelegate {
         let tokens = json["tokens"] as? String ?? ""
         sttSampleRate = json["sampleRate"] as? Int ?? 16000
 
-        var model = sherpaOnnxOnlineModelConfig(
+        var model = sherpaOnnxOfflineModelConfig(
             tokens: tokens,
-            transducer: sherpaOnnxOnlineTransducerModelConfig(
+            transducer: sherpaOnnxOfflineTransducerModelConfig(
                 encoder: encoder,
                 decoder: decoder,
                 joiner: joiner
             ),
             numThreads: 1,
-            debug: 1,
-            provider: "cpu"
+            provider: "cpu",
+            debug: 1
         )
         let feat = sherpaOnnxFeatureConfig(sampleRate: sttSampleRate)
-        var cfg = sherpaOnnxOnlineRecognizerConfig(
+        var cfg = sherpaOnnxOfflineRecognizerConfig(
             featConfig: feat,
             modelConfig: model,
-            enableEndpoint: false
+            decodingMethod: "greedy_search"
         )
-        recognizer = SherpaOnnxRecognizer(config: &cfg)
+        recognizer = SherpaOnnxOfflineRecognizer(config: &cfg)
     }
 
     @objc func startRecognition() {
         audioEngine = AVAudioEngine()
-        guard let engine = audioEngine, let rec = recognizer else { return }
+        capturedSamples.removeAll()
+        guard let engine = audioEngine else { return }
+        guard recognizer != nil else { return }
         let input = engine.inputNode
         let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: Double(sttSampleRate), channels: 1, interleaved: false)
         input.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
             let count = Int(buffer.frameLength)
             if let data = buffer.floatChannelData?[0] {
-                var samples = Array(UnsafeBufferPointer(start: data, count: count))
-                rec.acceptWaveform(samples: samples, sampleRate: self.sttSampleRate)
-                while rec.isReady() {
-                    rec.decode()
-                }
+                let samples = Array(UnsafeBufferPointer(start: data, count: count))
+                self.capturedSamples.append(contentsOf: samples)
             }
         }
         engine.prepare()
@@ -91,7 +91,7 @@ class TTSManager: RCTEventEmitter, AudioPlayerDelegate {
     }
 
     @objc func feedAudio(_ data: String) {
-        guard let bytes = Data(base64Encoded: data), let rec = recognizer else { return }
+        guard let bytes = Data(base64Encoded: data) else { return }
         let count = bytes.count / 2
         var samples = [Float]()
         samples.reserveCapacity(count)
@@ -101,10 +101,7 @@ class TTSManager: RCTEventEmitter, AudioPlayerDelegate {
                 samples.append(Float(val) / 32768.0)
             }
         }
-        rec.acceptWaveform(samples: samples, sampleRate: sttSampleRate)
-        while rec.isReady() {
-            rec.decode()
-        }
+        capturedSamples.append(contentsOf: samples)
     }
 
     @objc func stopRecognition(_ resolver: RCTPromiseResolveBlock, rejecter: RCTPromiseRejectBlock) {
@@ -115,11 +112,8 @@ class TTSManager: RCTEventEmitter, AudioPlayerDelegate {
             rejecter("NOT_READY", "Recognizer not ready", nil)
             return
         }
-        rec.inputFinished()
-        while rec.isReady() {
-            rec.decode()
-        }
-        let result = rec.getResult()
+        let result = rec.decode(samples: capturedSamples, sampleRate: sttSampleRate)
+        capturedSamples.removeAll()
         resolver(result.text)
     }
 
@@ -127,6 +121,7 @@ class TTSManager: RCTEventEmitter, AudioPlayerDelegate {
         audioEngine?.stop()
         audioEngine = nil
         recognizer = nil
+        capturedSamples.removeAll()
     }
 
     // Generate audio and play in real-time
