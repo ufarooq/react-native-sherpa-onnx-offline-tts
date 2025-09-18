@@ -6,13 +6,21 @@
 RCT_EXTERN_METHOD(initializeTTS:(double)sampleRate channels:(NSInteger)channels modelId:(NSString *)modelId)
 
 // Generate and Play method exposed to React Native
-RCT_EXTERN_METHOD(generateAndPlay:(NSString *)text 
-                  sid:(NSInteger)sid 
-                  speed:(double)speed 
-                  resolver:(RCTPromiseResolveBlock)resolver 
+RCT_EXTERN_METHOD(generateAndPlay:(NSString *)text
+                  sid:(NSInteger)sid
+                  speed:(double)speed
+                  resolver:(RCTPromiseResolveBlock)resolver
                   rejecter:(RCTPromiseRejectBlock)rejecter)
 
 // Deinitialize method exposed to React Native
 RCT_EXTERN_METHOD(deinitialize)
+
+// STT APIs
+RCT_EXTERN_METHOD(initializeSTT:(NSString *)modelId)
+RCT_EXTERN_METHOD(startRecognition)
+RCT_EXTERN_METHOD(feedAudio:(NSString *)data)
+RCT_EXTERN_METHOD(stopRecognition:(RCTPromiseResolveBlock)resolver
+                  rejecter:(RCTPromiseRejectBlock)rejecter)
+RCT_EXTERN_METHOD(deinitializeSTT)
 
 @end

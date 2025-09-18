@@ -20,6 +20,8 @@ const App = () => {
   const [downloadProgress, setDownloadProgress] = useState<number>(0);
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  const [isListening, setIsListening] = useState<boolean>(false);
+  const [transcript, setTranscript] = useState<string>('');
 
   // References
   const animatedScale = useRef(new Animated.Value(1)).current;
@@ -228,6 +230,40 @@ const App = () => {
     console.log('Playback stopped.');
   };
 
+  /**
+   * Begin STT capture from the microphone
+   */
+  const handleStartSTT = async () => {
+    try {
+      await TTSManager.initSTT(
+        JSON.stringify({
+          encoder: 'encoder.onnx',
+          decoder: 'decoder.onnx',
+          joiner: 'joiner.onnx',
+          tokens: 'tokens.txt',
+        })
+      );
+      TTSManager.startRecognition();
+      setIsListening(true);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  /**
+   * Stop STT capture and display the result
+   */
+  const handleStopSTT = async () => {
+    try {
+      const text = await TTSManager.stopRecognition();
+      setTranscript(text);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsListening(false);
+    }
+  };
+
   return (
     <View style={styles.container}>
       {/* Display Download Progress */}
@@ -262,9 +298,20 @@ const App = () => {
               onPress={handleStop}
               disabled={!isPlaying}
             />
+            <Button
+              title="Start STT"
+              onPress={handleStartSTT}
+              disabled={isListening}
+            />
+            <Button
+              title="Stop STT"
+              onPress={handleStopSTT}
+              disabled={!isListening}
+            />
           </View>
           <View style={styles.volumeContainer}>
             <Text>Current Volume: {volume.toFixed(2)}</Text>
+            <Text>Transcript: {transcript}</Text>
           </View>
         </>
       )}

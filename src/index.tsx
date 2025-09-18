@@ -38,4 +38,12 @@ export default {
   generateAndPlay,
   deinitialize,
   addVolumeListener,
+  // STT APIs
+  initSTT: (cfg: string) => TTSManager.initializeSTT(cfg),
+  startRecognition: () => TTSManager.startRecognition(),
+  feedAudio: (data: string) => TTSManager.feedAudio(data),
+  stopRecognition: async () => {
+    return await TTSManager.stopRecognition();
+  },
+  deinitializeSTT: () => TTSManager.deinitializeSTT(),
 };
